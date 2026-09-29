@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import {
-    doc,
-    getDoc,
-    collection,
-    runTransaction,
-    serverTimestamp,
-} from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface Mesa {
@@ -23,19 +17,6 @@ interface VideoYoutube {
     miniatura: string;
 }
 
-const GENEROS = [
-    "Salsa",
-    "Merengue",
-    "Vallenato",
-    "Reguetón",
-    "Bachata",
-    "Champeta",
-    "Popular / Despecho",
-    "Banda",
-    "Balada Romántica",
-    "Crossover / Mix",
-];
-
 export default function VistaMesa() {
     const params = useParams();
     const numeroMesa = params.numero as string;
@@ -48,103 +29,74 @@ export default function VistaMesa() {
     const [resultados, setResultados] = useState<VideoYoutube[]>([]);
     const [buscando, setBuscando] = useState(false);
 
-    const [videoParaAgregar, setVideoParaAgregar] = useState<VideoYoutube | null>(null);
-    const [generoSeleccionado, setGeneroSeleccionado] = useState("");
-    const [agregando, setAgregando] = useState(false);
+    const [agregandoId, setAgregandoId] = useState<string | null>(null);
     const [mensaje, setMensaje] = useState<string | null>(null);
 
+    // Verifica si la mesa existe (una sola vez al entrar)
     useEffect(() => {
-        cargarMesa();
+        async function verificarMesa() {
+            const ref = doc(db, "mesas", numeroMesa);
+            const snapshot = await getDoc(ref);
+            setExiste(snapshot.exists());
+            setCargando(false);
+        }
+        verificarMesa();
     }, [numeroMesa]);
 
-    async function cargarMesa() {
-        setCargando(true);
+    // Escucha los créditos EN VIVO, para que se actualicen solos tras cada canción agregada
+    useEffect(() => {
+        if (!existe) return;
         const ref = doc(db, "mesas", numeroMesa);
-        const snapshot = await getDoc(ref);
-
-        if (snapshot.exists()) {
-            setMesa(snapshot.data() as Mesa);
-            setExiste(true);
-        } else {
-            setExiste(false);
-        }
-        setCargando(false);
-    }
+        const unsubscribe = onSnapshot(ref, (snapshot) => {
+            if (snapshot.exists()) {
+                setMesa(snapshot.data() as Mesa);
+            }
+        });
+        return () => unsubscribe();
+    }, [numeroMesa, existe]);
 
     async function buscarVideos() {
         if (!busqueda.trim()) return;
         setBuscando(true);
         setResultados([]);
+        setMensaje(null);
 
-        const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
-        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=8&q=${encodeURIComponent(
-            busqueda
-        )}&key=${apiKey}`;
-
-        const res = await fetch(url);
+        const res = await fetch(`/api/buscar-canciones?q=${encodeURIComponent(busqueda)}`);
         const data = await res.json();
 
-        const videos: VideoYoutube[] = data.items.map((item: any) => ({
-            id: item.id.videoId,
-            titulo: item.snippet.title,
-            canal: item.snippet.channelTitle,
-            miniatura: item.snippet.thumbnails.medium.url,
-        }));
+        if (res.ok) {
+            setResultados(data.videos);
+        } else {
+            setMensaje(`⚠️ ${data.error || "Error al buscar"}`);
+        }
 
-        setResultados(videos);
         setBuscando(false);
     }
 
-    function abrirSeleccionGenero(video: VideoYoutube) {
-        setVideoParaAgregar(video);
-        setGeneroSeleccionado("");
-        setMensaje(null);
-    }
-
-    async function confirmarAgregarCancion() {
-        if (!videoParaAgregar || !generoSeleccionado) return;
-        setAgregando(true);
+    async function agregarCancion(video: VideoYoutube) {
+        setAgregandoId(video.id);
         setMensaje(null);
 
-        const mesaRef = doc(db, "mesas", numeroMesa);
-        const colaRef = collection(db, "colaCanciones");
+        const res = await fetch("/api/agregar-cancion", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                numeroMesa,
+                videoId: video.id,
+                titulo: video.titulo,
+                canal: video.canal,
+            }),
+        });
 
-        try {
-            await runTransaction(db, async (transaction) => {
-                const mesaSnap = await transaction.get(mesaRef);
+        const data = await res.json();
 
-                if (!mesaSnap.exists()) {
-                    throw new Error("La mesa ya no existe.");
-                }
-
-                const creditos = mesaSnap.data().creditosDisponibles as number;
-
-                if (creditos <= 0) {
-                    throw new Error("No te quedan créditos disponibles esta hora.");
-                }
-
-                transaction.update(mesaRef, { creditosDisponibles: creditos - 1 });
-
-                const nuevaCancionRef = doc(colaRef);
-                transaction.set(nuevaCancionRef, {
-                    titulo: videoParaAgregar.titulo,
-                    artista: videoParaAgregar.canal,
-                    genero: generoSeleccionado,
-                    youtubeVideoId: videoParaAgregar.id,
-                    mesaId: numeroMesa,
-                    estado: "pendiente",
-                    creadaEn: serverTimestamp(),
-                });
-            });
-
-            setMensaje("✅ ¡Canción agregada a la cola!");
-            setVideoParaAgregar(null);
-            cargarMesa();
-        } catch (error: any) {
-            setMensaje(`⚠️ ${error.message || "Ocurrió un error al agregar la canción."}`);
+        if (res.ok) {
+            setMensaje(`✅ Agregada como ${data.genero}`);
+        } else {
+            setMensaje(`⚠️ ${data.error}`);
         }
 
-        setAgregando(false);
+        setAgregandoId(null);
     }
 
     if (cargando) return <p style={{ padding: 20 }}>Cargando...</p>;
@@ -170,6 +122,7 @@ export default function VistaMesa() {
                     type="text"
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && buscarVideos()}
                     placeholder="Busca tu canción..."
                     style={{ padding: 8, width: "70%", marginRight: 10 }}
                 />
@@ -179,6 +132,7 @@ export default function VistaMesa() {
             </div>
 
             {buscando && <p>Buscando...</p>}
+            {mensaje && <p style={{ marginTop: 10, fontWeight: "bold" }}>{mensaje}</p>}
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 20 }}>
                 {resultados.map((video) => (
@@ -187,51 +141,15 @@ export default function VistaMesa() {
                         <p style={{ fontSize: 14, fontWeight: "bold" }}>{video.titulo}</p>
                         <p style={{ fontSize: 12, color: "#666" }}>{video.canal}</p>
                         <button
-                            onClick={() => abrirSeleccionGenero(video)}
+                            onClick={() => agregarCancion(video)}
+                            disabled={agregandoId === video.id}
                             style={{ padding: "6px 12px", width: "100%" }}
                         >
-                            + Agregar a la cola
+                            {agregandoId === video.id ? "Agregando..." : "+ Agregar a la cola"}
                         </button>
                     </div>
                 ))}
             </div>
-
-            {videoParaAgregar && (
-                <div style={{ marginTop: 20, padding: 16, border: "1px solid #ccc", borderRadius: 8 }}>
-                    <p>
-                        Vas a agregar: <strong>{videoParaAgregar.titulo}</strong>
-                    </p>
-                    <label>
-                        Selecciona el género:
-                        <select
-                            value={generoSeleccionado}
-                            onChange={(e) => setGeneroSeleccionado(e.target.value)}
-                            style={{ marginLeft: 10, padding: 6 }}
-                        >
-                            <option value="">-- Elige un género --</option>
-                            {GENEROS.map((g) => (
-                                <option key={g} value={g}>
-                                    {g}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                    <div style={{ marginTop: 10 }}>
-                        <button
-                            onClick={confirmarAgregarCancion}
-                            disabled={!generoSeleccionado || agregando}
-                            style={{ padding: "8px 16px", marginRight: 10 }}
-                        >
-                            {agregando ? "Agregando..." : "Confirmar"}
-                        </button>
-                        <button onClick={() => setVideoParaAgregar(null)} style={{ padding: "8px 16px" }}>
-                            Cancelar
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {mensaje && <p style={{ marginTop: 20, fontWeight: "bold" }}>{mensaje}</p>}
         </div>
     );
 }
