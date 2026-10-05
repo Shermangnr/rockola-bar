@@ -159,16 +159,24 @@ export default function VistaPantalla() {
           <p>Esperando canciones en la cola...</p>
         )}
 
-        <h3 style={{ marginTop: 20 }}> Próximas en la cola ({Math.max(0, pendientesVisibles.length - 1)}):</h3>
-        <ol>
-          {construirOrdenReproduccion(pendientesVisibles)
-            .slice(1, 6)
-            .map((c) => (
-              <li key={c.id}>
-                {c.titulo} ({c.genero})
-              </li>
-            ))}
-        </ol>
+        {(() => {
+          const proximas = construirOrdenReproduccion(pendientesVisibles)
+            .filter((c) => c.id !== videoActual?.id)
+            .slice(0, 5);
+
+          return (
+            <>
+              <h3 style={{ marginTop: 20 }}>Próximas en la cola ({proximas.length}):</h3>
+              <ol>
+                {proximas.map((c) => (
+                  <li key={c.id}>
+                    {c.titulo} ({c.genero})
+                  </li>
+                ))}
+              </ol>
+            </>
+          );
+        })()}
       </div>
     </div>
   );
