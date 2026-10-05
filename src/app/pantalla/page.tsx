@@ -160,13 +160,13 @@ export default function VistaPantalla() {
         )}
 
         {(() => {
-          const proximas = construirOrdenReproduccion(pendientesVisibles)
-            .filter((c) => c.id !== videoActual?.id)
-            .slice(0, 5);
+          const todasLasProximas = construirOrdenReproduccion(pendientesVisibles)
+            .filter((c) => c.id !== videoActual?.id);
+          const proximas = todasLasProximas.slice(0, 8);
 
           return (
             <>
-              <h3 style={{ marginTop: 20 }}>Próximas en la cola ({proximas.length}):</h3>
+              <h3 style={{ marginTop: 20 }}>Próximas en la cola ({todasLasProximas.length}):</h3>
               <ol>
                 {proximas.map((c) => (
                   <li key={c.id}>

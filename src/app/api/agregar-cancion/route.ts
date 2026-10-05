@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { GoogleGenAI } from "@google/genai";
 import { FieldValue } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
+import { INTERVALO_MINUTOS } from "@/lib/creditos";
 
 const GENEROS = [
     "Salsa",
@@ -47,6 +49,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
     }
 
+    const yaEnCola = await adminDb
+        .collection("colaCanciones")
+        .where("youtubeVideoId", "==", videoId)
+        .where("estado", "==", "pendiente")
+        .limit(1)
+        .get();
+
+    if (!yaEnCola.empty) {
+        return NextResponse.json(
+            { error: "Esta canción ya está en la cola. Intenta con otra." },
+            { status: 409 }
+        );
+    }
+
     const genero = await clasificarGenero(titulo, canal);
 
     if (!genero) {
@@ -67,13 +83,20 @@ export async function POST(request: NextRequest) {
                 throw new Error("La mesa no existe.");
             }
 
-            const creditos = mesaSnap.data()?.creditosDisponibles as number;
+            const mesaData = mesaSnap.data()!;
+            const creditosActuales = mesaData.creditosDisponibles as number;
 
-            if (creditos <= 0) {
+            if (creditosActuales <= 0) {
                 throw new Error("No te quedan créditos disponibles esta hora.");
             }
 
-            transaction.update(mesaRef, { creditosDisponibles: creditos - 1 });
+            const nuevosCreditos = creditosActuales - 1;
+            const seAgotaronAhora = nuevosCreditos === 0;
+
+            transaction.update(mesaRef, {
+                creditosDisponibles: nuevosCreditos,
+                ...(seAgotaronAhora ? { ventanaInicio: Timestamp.now() } : {}),
+            });
 
             const nuevaCancionRef = colaRef.doc();
             transaction.set(nuevaCancionRef, {
