@@ -7,16 +7,17 @@ import {
   signOut,
   User,
 } from "firebase/auth";
-import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  deleteDoc, 
-  updateDoc, 
-  doc 
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  deleteDoc,
+  updateDoc,
+  doc
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { writeBatch } from "firebase/firestore";
 
 interface Cancion {
   id: string;
@@ -108,6 +109,37 @@ export default function VistaAdmin() {
     }
   }
 
+  async function limpiarHistorial() {
+    const confirmar = window.confirm("¿Estás seguro de eliminar TODAS las canciones ya reproducidas? Las pendientes no se verán afectadas.");
+    if (!confirmar) return;
+
+    try {
+      // Iniciamos un lote de escrituras
+      const batch = writeBatch(db);
+
+      // Filtramos solo las que ya sonaron
+      const cancionesReproducidas = canciones.filter(c => c.estado === "reproducida");
+
+      if (cancionesReproducidas.length === 0) {
+        alert("No hay canciones reproducidas para limpiar.");
+        return;
+      }
+
+      // Preparamos cada borrado dentro del lote
+      cancionesReproducidas.forEach(cancion => {
+        const cancionRef = doc(db, "colaCanciones", cancion.id);
+        batch.delete(cancionRef);
+      });
+
+      // Ejecutamos todos los borrados al mismo tiempo
+      await batch.commit();
+
+    } catch (error) {
+      console.error("Error al limpiar historial:", error);
+      alert("Hubo un error al limpiar el historial.");
+    }
+  }
+
   // -----------------------------------------
 
   async function iniciarSesion(e: React.FormEvent) {
@@ -175,16 +207,16 @@ export default function VistaAdmin() {
           Cerrar sesión
         </button>
       </div>
-      
+
       <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
-        
+
         <div style={{ flex: 1, minWidth: "350px", border: "1px solid #ccc", padding: "10px", borderRadius: "8px" }}>
           <h2>Estado de Mesas</h2>
           {mesas.map(mesa => (
             <div key={mesa.id} style={{ padding: "12px 8px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>Mesa {mesa.numero}</span>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <button 
+                <button
                   onClick={() => ajustarCreditos(mesa.id, mesa.creditosDisponibles, -1)}
                   style={{ padding: "2px 8px", cursor: "pointer" }}
                   disabled={mesa.creditosDisponibles <= 0}
@@ -192,7 +224,7 @@ export default function VistaAdmin() {
                   -
                 </button>
                 <strong>{mesa.creditosDisponibles} cr</strong>
-                <button 
+                <button
                   onClick={() => ajustarCreditos(mesa.id, mesa.creditosDisponibles, 1)}
                   style={{ padding: "2px 8px", cursor: "pointer" }}
                 >
@@ -204,7 +236,23 @@ export default function VistaAdmin() {
         </div>
 
         <div style={{ flex: 2, minWidth: "350px", border: "1px solid #ccc", padding: "10px", borderRadius: "8px" }}>
-          <h2>Cola de Canciones</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <h2 style={{ margin: 0 }}>Cola de Canciones</h2>
+            <button
+              onClick={limpiarHistorial}
+              style={{
+                padding: "6px 12px",
+                backgroundColor: "#ff4d4f",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "0.9em"
+              }}
+            >
+              🧹 Limpiar reproducidas
+            </button>
+          </div>
           {canciones.length === 0 ? <p>No hay canciones en la base de datos.</p> : null}
           {canciones.map(cancion => (
             <div key={cancion.id} style={{ padding: "10px 8px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -215,10 +263,10 @@ export default function VistaAdmin() {
                 </div>
               </div>
               <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                <span style={{ 
-                  display: "inline-block", 
-                  padding: "2px 6px", 
-                  borderRadius: "4px", 
+                <span style={{
+                  display: "inline-block",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
                   fontSize: "0.8em",
                   backgroundColor: cancion.estado === "pendiente" ? "#e6f7ff" : "#f6ffed",
                   color: cancion.estado === "pendiente" ? "#0050b3" : "#389e0d"
@@ -226,14 +274,14 @@ export default function VistaAdmin() {
                   {cancion.estado}
                 </span>
                 <div style={{ fontSize: "0.8em" }}>Mesa {cancion.mesaId}</div>
-                <button 
+                <button
                   onClick={() => eliminarCancion(cancion.id)}
-                  style={{ 
-                    fontSize: "0.8em", 
-                    padding: "2px 6px", 
-                    backgroundColor: "#ff4d4f", 
-                    color: "white", 
-                    border: "none", 
+                  style={{
+                    fontSize: "0.8em",
+                    padding: "2px 6px",
+                    backgroundColor: "#ff4d4f",
+                    color: "white",
+                    border: "none",
                     borderRadius: "4px",
                     cursor: "pointer"
                   }}
