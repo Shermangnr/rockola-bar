@@ -76,14 +76,13 @@ export default function VistaPantalla() {
         events: {
           onStateChange: (event: any) => {
             if (event.data === window.YT.PlayerState.ENDED) {
-              marcarComoReproducida();
+              actualizarEstadoCancion("reproducida");
             }
           },
-          // NUEVO: Escudo protector contra videos bloqueados
           onError: (event: any) => {
             console.error("YouTube bloqueó este video. Código de error:", event.data);
-            // Saltamos la canción automáticamente marcándola como completada
-            marcarComoReproducida();
+            actualizarEstadoCancion("error");
+            return; // Evita que YouTube intente lanzar el evento ENDED después del error
           }
         },
       });
@@ -106,7 +105,8 @@ export default function VistaPantalla() {
     playerRef.current.loadVideoById(siguiente.youtubeVideoId);
   }, [pendientes, videoActual, iniciado]);
 
-  async function marcarComoReproducida() {
+  // Modificamos la función para recibir el estado ("reproducida" o "error")
+  async function actualizarEstadoCancion(estadoNuevo: "reproducida" | "error") {
     const actual = videoActualRef.current;
     if (!actual) return;
     if (idsFinalizadosRef.current.has(actual.id)) return;
@@ -117,7 +117,7 @@ export default function VistaPantalla() {
     await fetch("/api/marcar-reproducida", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cancionId: actual.id }),
+      body: JSON.stringify({ cancionId: actual.id, estado: estadoNuevo }), // Enviamos el estado
     });
   }
 

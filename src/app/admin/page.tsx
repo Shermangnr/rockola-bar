@@ -25,7 +25,7 @@ interface Cancion {
   artista: string;
   genero: string;
   mesaId: string;
-  estado: "pendiente" | "reproducida";
+  estado: "pendiente" | "reproducida" | "error";
 }
 
 interface Mesa {
@@ -118,7 +118,7 @@ export default function VistaAdmin() {
       const batch = writeBatch(db);
 
       // Filtramos solo las que ya sonaron
-      const cancionesReproducidas = canciones.filter(c => c.estado === "reproducida");
+      const cancionesReproducidas = canciones.filter(c => c.estado === "reproducida" || c.estado === "error");
 
       if (cancionesReproducidas.length === 0) {
         alert("No hay canciones reproducidas para limpiar.");
@@ -268,8 +268,8 @@ export default function VistaAdmin() {
                   padding: "2px 6px",
                   borderRadius: "4px",
                   fontSize: "0.8em",
-                  backgroundColor: cancion.estado === "pendiente" ? "#e6f7ff" : "#f6ffed",
-                  color: cancion.estado === "pendiente" ? "#0050b3" : "#389e0d"
+                  backgroundColor: cancion.estado === "pendiente" ? "#e6f7ff" : cancion.estado === "error" ? "#fff1f0" : "#f6ffed",
+                  color: cancion.estado === "pendiente" ? "#0050b3" : cancion.estado === "error" ? "#cf1322" : "#389e0d"
                 }}>
                   {cancion.estado}
                 </span>
