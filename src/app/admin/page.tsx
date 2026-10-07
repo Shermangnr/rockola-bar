@@ -7,10 +7,17 @@ import {
   signOut,
   User,
 } from "firebase/auth";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase"; // Asegúrate de exportar 'db' en tu lib/firebase.ts
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  deleteDoc, 
+  updateDoc, 
+  doc 
+} from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
-// Definimos las interfaces para TypeScript basadas en tu modelo de datos
 interface Cancion {
   id: string;
   titulo: string;
@@ -35,11 +42,9 @@ export default function VistaAdmin() {
   const [errorLogin, setErrorLogin] = useState<string | null>(null);
   const [entrando, setEntrando] = useState(false);
 
-  // Nuevos estados para almacenar los datos de Firestore
   const [canciones, setCanciones] = useState<Cancion[]>([]);
   const [mesas, setMesas] = useState<Mesa[]>([]);
 
-  // Efecto para la autenticación
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUsuario(u);
@@ -48,39 +53,62 @@ export default function VistaAdmin() {
     return () => unsubscribe();
   }, []);
 
-  // Efecto para escuchar Firestore (SOLO si hay un usuario logueado)
   useEffect(() => {
-    if (!usuario) return; // Si no hay usuario, no consultamos la BD
+    if (!usuario) return;
 
-    // Escuchar las mesas
     const unsubscribeMesas = onSnapshot(collection(db, "mesas"), (snapshot) => {
       const mesasData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Mesa[];
-      
-      // Ordenamos las mesas por número de menor a mayor
       mesasData.sort((a, b) => a.numero - b.numero);
       setMesas(mesasData);
     });
 
-    // Escuchar la cola de canciones (ordenadas por fecha de creación)
     const qCanciones = query(collection(db, "colaCanciones"), orderBy("creadaEn", "asc"));
     const unsubscribeCanciones = onSnapshot(qCanciones, (snapshot) => {
       const cancionesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Cancion[];
-      
       setCanciones(cancionesData);
     });
 
-    // Limpiamos los "listeners" cuando el componente se desmonta o el usuario cierra sesión
     return () => {
       unsubscribeMesas();
       unsubscribeCanciones();
     };
   }, [usuario]);
+
+  // --- NUEVAS FUNCIONES DE ADMINISTRADOR ---
+
+  async function ajustarCreditos(mesaId: string, creditosActuales: number, ajuste: number) {
+    const nuevosCreditos = creditosActuales + ajuste;
+    if (nuevosCreditos < 0) return; // Evitar que los créditos sean negativos
+
+    try {
+      await updateDoc(doc(db, "mesas", mesaId), {
+        creditosDisponibles: nuevosCreditos
+      });
+    } catch (error) {
+      console.error("Error al actualizar créditos:", error);
+      alert("Hubo un error al actualizar los créditos.");
+    }
+  }
+
+  async function eliminarCancion(cancionId: string) {
+    const confirmar = window.confirm("¿Estás seguro de que deseas eliminar esta canción de la cola?");
+    if (!confirmar) return;
+
+    try {
+      await deleteDoc(doc(db, "colaCanciones", cancionId));
+    } catch (error) {
+      console.error("Error al eliminar canción:", error);
+      alert("Hubo un error al eliminar la canción.");
+    }
+  }
+
+  // -----------------------------------------
 
   async function iniciarSesion(e: React.FormEvent) {
     e.preventDefault();
@@ -139,7 +167,6 @@ export default function VistaAdmin() {
     );
   }
 
-  // Interfaz del panel una vez logueado
   return (
     <div style={{ padding: 20, fontFamily: "sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -151,30 +178,43 @@ export default function VistaAdmin() {
       
       <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
         
-        {/* Columna de Mesas */}
-        <div style={{ flex: 1, minWidth: "300px", border: "1px solid #ccc", padding: "10px", borderRadius: "8px" }}>
+        <div style={{ flex: 1, minWidth: "350px", border: "1px solid #ccc", padding: "10px", borderRadius: "8px" }}>
           <h2>Estado de Mesas</h2>
           {mesas.map(mesa => (
-            <div key={mesa.id} style={{ padding: "8px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between" }}>
+            <div key={mesa.id} style={{ padding: "12px 8px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>Mesa {mesa.numero}</span>
-              <strong>{mesa.creditosDisponibles} créditos</strong>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button 
+                  onClick={() => ajustarCreditos(mesa.id, mesa.creditosDisponibles, -1)}
+                  style={{ padding: "2px 8px", cursor: "pointer" }}
+                  disabled={mesa.creditosDisponibles <= 0}
+                >
+                  -
+                </button>
+                <strong>{mesa.creditosDisponibles} cr</strong>
+                <button 
+                  onClick={() => ajustarCreditos(mesa.id, mesa.creditosDisponibles, 1)}
+                  style={{ padding: "2px 8px", cursor: "pointer" }}
+                >
+                  +
+                </button>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Columna de Canciones */}
-        <div style={{ flex: 2, minWidth: "300px", border: "1px solid #ccc", padding: "10px", borderRadius: "8px" }}>
+        <div style={{ flex: 2, minWidth: "350px", border: "1px solid #ccc", padding: "10px", borderRadius: "8px" }}>
           <h2>Cola de Canciones</h2>
           {canciones.length === 0 ? <p>No hay canciones en la base de datos.</p> : null}
           {canciones.map(cancion => (
-            <div key={cancion.id} style={{ padding: "8px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between" }}>
+            <div key={cancion.id} style={{ padding: "10px 8px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <strong>{cancion.titulo}</strong>
                 <div style={{ fontSize: "0.8em", color: "#666" }}>
                   {cancion.artista} • {cancion.genero}
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
+              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
                 <span style={{ 
                   display: "inline-block", 
                   padding: "2px 6px", 
@@ -185,7 +225,21 @@ export default function VistaAdmin() {
                 }}>
                   {cancion.estado}
                 </span>
-                <div style={{ fontSize: "0.8em", marginTop: "4px" }}>Mesa {cancion.mesaId}</div>
+                <div style={{ fontSize: "0.8em" }}>Mesa {cancion.mesaId}</div>
+                <button 
+                  onClick={() => eliminarCancion(cancion.id)}
+                  style={{ 
+                    fontSize: "0.8em", 
+                    padding: "2px 6px", 
+                    backgroundColor: "#ff4d4f", 
+                    color: "white", 
+                    border: "none", 
+                    borderRadius: "4px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Eliminar
+                </button>
               </div>
             </div>
           ))}
