@@ -25,7 +25,7 @@ export default function VistaPantalla() {
   const playerRef = useRef<any>(null);
   const apiListaRef = useRef(false);
   const videoActualRef = useRef<CancionFirestore | null>(null);
-  const idsFinalizadosRef = useRef<Set<string>>(new Set()); // "ya terminadas", aunque Firestore no haya avisado todavía
+  const idsFinalizadosRef = useRef<Set<string>>(new Set());
 
   function actualizarVideoActual(valor: CancionFirestore | null) {
     videoActualRef.current = valor;
@@ -49,7 +49,6 @@ export default function VistaPantalla() {
         };
       });
 
-      // Una vez Firestore confirma el cambio, ya no hace falta recordarla como "recién terminada"
       for (const id of idsFinalizadosRef.current) {
         if (!canciones.some((c) => c.id === id)) {
           idsFinalizadosRef.current.delete(id);
@@ -80,6 +79,12 @@ export default function VistaPantalla() {
               marcarComoReproducida();
             }
           },
+          // NUEVO: Escudo protector contra videos bloqueados
+          onError: (event: any) => {
+            console.error("YouTube bloqueó este video. Código de error:", event.data);
+            // Saltamos la canción automáticamente marcándola como completada
+            marcarComoReproducida();
+          }
         },
       });
     };
@@ -90,7 +95,6 @@ export default function VistaPantalla() {
     if (videoActual) return;
     if (!playerRef.current || !playerRef.current.loadVideoById) return;
 
-    // Excluye las que ya sabemos que terminaron, aunque Firestore no haya avisado todavía
     const disponibles = pendientes.filter((c) => !idsFinalizadosRef.current.has(c.id));
     if (disponibles.length === 0) return;
 
@@ -105,7 +109,7 @@ export default function VistaPantalla() {
   async function marcarComoReproducida() {
     const actual = videoActualRef.current;
     if (!actual) return;
-    if (idsFinalizadosRef.current.has(actual.id)) return; // evita marcar la misma dos veces
+    if (idsFinalizadosRef.current.has(actual.id)) return;
 
     idsFinalizadosRef.current.add(actual.id);
     actualizarVideoActual(null);

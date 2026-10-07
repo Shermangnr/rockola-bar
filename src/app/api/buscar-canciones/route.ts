@@ -11,7 +11,9 @@ export async function GET(request: NextRequest) {
     }
 
     const apiKey = process.env.YOUTUBE_API_KEY;
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=8&q=${encodeURIComponent(
+    
+    // Mejoramos la URL agregando videoEmbeddable=true y videoSyndicated=true
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&videoEmbeddable=true&videoSyndicated=true&maxResults=8&q=${encodeURIComponent(
         busqueda
     )}&key=${apiKey}`;
 
