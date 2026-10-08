@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { doc, getDoc, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { INTERVALO_MINUTOS } from "@/lib/creditos";
+import { construirOrdenReproduccion, CancionPendiente } from "@/lib/ordenCola";
 
 interface Mesa {
     numero: number;
@@ -35,6 +36,9 @@ export default function VistaMesa() {
     const [mensaje, setMensaje] = useState<string | null>(null);
 
     const [segundosRestantes, setSegundosRestantes] = useState(0);
+    
+    // NUEVO ESTADO: Guardará la cola ordenada
+    const [cola, setCola] = useState<CancionPendiente[]>([]);
 
     useEffect(() => {
         async function verificarMesa() {
@@ -76,7 +80,32 @@ export default function VistaMesa() {
         return () => unsubscribe();
     }, [numeroMesa, existe]);
 
-    // Cuenta regresiva: recalcula cada segundo cuánto falta para el próximo reseteo
+    // NUEVO EFECTO: Escuchar la cola de canciones en tiempo real
+    useEffect(() => {
+        if (!existe) return;
+        
+        const q = query(collection(db, "colaCanciones"), where("estado", "==", "pendiente"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const canciones = snapshot.docs.map((doc) => {
+                const data = doc.data();
+                const creadaEn = data.creadaEn as Timestamp | null;
+                return {
+                    id: doc.id,
+                    titulo: data.titulo,
+                    genero: data.genero,
+                    mesaId: data.mesaId,
+                    creadaEn: creadaEn ? creadaEn.toMillis() : Date.now(),
+                };
+            }) as CancionPendiente[];
+            
+            // Pasamos las canciones crudas por el algoritmo de bloques armónicos
+            const ordenadas = construirOrdenReproduccion(canciones);
+            setCola(ordenadas);
+        });
+
+        return () => unsubscribe();
+    }, [existe]);
+
     useEffect(() => {
         if (!mesa) return;
 
@@ -216,6 +245,26 @@ export default function VistaMesa() {
                     </div>
                 </>
             )}
+
+            {/* NUEVA SECCIÓN: Cola de reproducción */}
+            <div style={{ marginTop: 40, borderTop: "1px solid #eee", paddingTop: 20 }}>
+                <h2>🎶 Próximas en sonar</h2>
+                {cola.length === 0 ? (
+                    <p style={{ color: "#666" }}>No hay canciones en la cola. ¡Sé el primero en pedir una!</p>
+                ) : (
+                    <ol style={{ paddingLeft: 20, margin: 0 }}>
+                        {/* Mostramos solo las siguientes 10 para no hacer scroll infinito */}
+                        {cola.slice(0, 10).map((c) => (
+                            <li key={c.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #f5f5f5" }}>
+                                <strong>{c.titulo}</strong>
+                                <div style={{ fontSize: "0.85em", color: "#666", marginTop: 4 }}>
+                                    {c.genero} • Pedida por Mesa {c.mesaId}
+                                </div>
+                            </li>
+                        ))}
+                    </ol>
+                )}
+            </div>
         </div>
     );
 }
