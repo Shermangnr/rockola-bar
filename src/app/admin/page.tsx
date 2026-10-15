@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { writeBatch } from "firebase/firestore";
+import Swal from "sweetalert2";
 
 interface Cancion {
   id: string;
@@ -98,45 +99,73 @@ export default function VistaAdmin() {
   }
 
   async function eliminarCancion(cancionId: string) {
-    const confirmar = window.confirm("¿Estás seguro de que deseas eliminar esta canción de la cola?");
-    if (!confirmar) return;
+    const confirmar = await Swal.fire({
+      title: "¿Eliminar canción?",
+      text: "Desaparecerá de la cola definitivamente.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ff4d4f",
+      cancelButtonColor: "#d9d9d9",
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar"
+    });
+
+    if (!confirmar.isConfirmed) return;
 
     try {
       await deleteDoc(doc(db, "colaCanciones", cancionId));
+      Swal.fire({
+        title: "¡Eliminada!",
+        icon: "success",
+        timer: 1500,
+        showConfirmButton: false
+      });
     } catch (error) {
       console.error("Error al eliminar canción:", error);
-      alert("Hubo un error al eliminar la canción.");
+      Swal.fire("Error", "Hubo un problema al eliminar la canción.", "error");
     }
   }
 
   async function limpiarHistorial() {
-    const confirmar = window.confirm("¿Estás seguro de eliminar TODAS las canciones ya reproducidas? Las pendientes no se verán afectadas.");
-    if (!confirmar) return;
+    const confirmar = await Swal.fire({
+      title: "¿Limpiar historial?",
+      text: "Se borrarán todas las canciones ya reproducidas o con error. Las pendientes no se verán afectadas.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#ff4d4f",
+      cancelButtonColor: "#d9d9d9",
+      confirmButtonText: "🧹 Sí, limpiar todo",
+      cancelButtonText: "Cancelar"
+    });
+
+    if (!confirmar.isConfirmed) return;
 
     try {
-      // Iniciamos un lote de escrituras
       const batch = writeBatch(db);
-
-      // Filtramos solo las que ya sonaron
       const cancionesReproducidas = canciones.filter(c => c.estado === "reproducida" || c.estado === "error");
 
       if (cancionesReproducidas.length === 0) {
-        alert("No hay canciones reproducidas para limpiar.");
+        Swal.fire("Nada que limpiar", "No hay canciones reproducidas actualmente.", "info");
         return;
       }
 
-      // Preparamos cada borrado dentro del lote
       cancionesReproducidas.forEach(cancion => {
         const cancionRef = doc(db, "colaCanciones", cancion.id);
         batch.delete(cancionRef);
       });
 
-      // Ejecutamos todos los borrados al mismo tiempo
       await batch.commit();
-
+      
+      Swal.fire({
+        title: "¡Historial limpio!",
+        icon: "success",
+        timer: 1500,
+        showConfirmButton: false
+      });
+      
     } catch (error) {
       console.error("Error al limpiar historial:", error);
-      alert("Hubo un error al limpiar el historial.");
+      Swal.fire("Error", "Hubo un error al limpiar el historial.", "error");
     }
   }
 
