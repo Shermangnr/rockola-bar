@@ -191,7 +191,26 @@ export default function VistaAdmin() {
   }
 
   if (cargandoAuth) {
-    return <p style={{ padding: 20 }}>Cargando...</p>;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", fontFamily: "sans-serif" }}>
+        <div style={{
+          border: "4px solid rgba(0, 0, 0, 0.1)",
+          width: "40px",
+          height: "40px",
+          borderRadius: "50%",
+          borderLeftColor: "#000",
+          animation: "spin 1s linear infinite",
+          marginBottom: "15px"
+        }} />
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+        <p style={{ fontSize: "18px", color: "#666" }}>Cargando panel...</p>
+      </div>
+    );
   }
 
   if (!usuario) {

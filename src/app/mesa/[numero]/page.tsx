@@ -6,11 +6,12 @@ import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from "fi
 import { db } from "@/lib/firebase";
 import { INTERVALO_MINUTOS } from "@/lib/creditos";
 import { construirOrdenReproduccion, CancionPendiente } from "@/lib/ordenCola";
+import { Toaster, toast } from "sonner"; 
 
 interface Mesa {
     numero: number;
     creditosDisponibles: number;
-    ventanaInicio: number; // en milisegundos
+    ventanaInicio: number;
 }
 
 interface VideoYoutube {
@@ -33,11 +34,7 @@ export default function VistaMesa() {
     const [buscando, setBuscando] = useState(false);
 
     const [agregandoId, setAgregandoId] = useState<string | null>(null);
-    const [mensaje, setMensaje] = useState<string | null>(null);
-
     const [segundosRestantes, setSegundosRestantes] = useState(0);
-    
-    // NUEVO ESTADO: Guardará la cola ordenada
     const [cola, setCola] = useState<CancionPendiente[]>([]);
 
     useEffect(() => {
@@ -52,14 +49,11 @@ export default function VistaMesa() {
 
     useEffect(() => {
         if (!existe) return;
-
         async function revisarEstado() {
             await fetch(`/api/estado-mesa?numeroMesa=${numeroMesa}`);
         }
-
         revisarEstado();
         const intervalo = setInterval(revisarEstado, 15000);
-
         return () => clearInterval(intervalo);
     }, [numeroMesa, existe]);
 
@@ -80,10 +74,8 @@ export default function VistaMesa() {
         return () => unsubscribe();
     }, [numeroMesa, existe]);
 
-    // NUEVO EFECTO: Escuchar la cola de canciones en tiempo real
     useEffect(() => {
         if (!existe) return;
-        
         const q = query(collection(db, "colaCanciones"), where("estado", "==", "pendiente"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const canciones = snapshot.docs.map((doc) => {
@@ -97,24 +89,19 @@ export default function VistaMesa() {
                     creadaEn: creadaEn ? creadaEn.toMillis() : Date.now(),
                 };
             }) as CancionPendiente[];
-            
-            // Pasamos las canciones crudas por el algoritmo de bloques armónicos
             const ordenadas = construirOrdenReproduccion(canciones);
             setCola(ordenadas);
         });
-
         return () => unsubscribe();
     }, [existe]);
 
     useEffect(() => {
         if (!mesa) return;
-
         function calcular() {
             const finVentana = mesa!.ventanaInicio + INTERVALO_MINUTOS * 60 * 1000;
             const restante = Math.max(0, Math.round((finVentana - Date.now()) / 1000));
             setSegundosRestantes(restante);
         }
-
         calcular();
         const intervalo = setInterval(calcular, 1000);
         return () => clearInterval(intervalo);
@@ -124,15 +111,17 @@ export default function VistaMesa() {
         if (!busqueda.trim()) return;
         setBuscando(true);
         setResultados([]);
-        setMensaje(null);
 
         const res = await fetch(`/api/buscar-canciones?q=${encodeURIComponent(busqueda)}`);
         const data = await res.json();
 
         if (res.ok) {
             setResultados(data.videos);
+            if (data.videos.length === 0) {
+                toast.info("No encontramos canciones con ese nombre."); // Aviso sutil si no hay resultados
+            }
         } else {
-            setMensaje(`⚠️ ${data.error || "Error al buscar"}`);
+            toast.error(data.error || "Error al buscar"); // Error rojo
         }
 
         setBuscando(false);
@@ -140,7 +129,9 @@ export default function VistaMesa() {
 
     async function agregarCancion(video: VideoYoutube) {
         setAgregandoId(video.id);
-        setMensaje(null);
+        
+        // 2. Mostramos un mensaje de carga flotante mientras Gemini procesa
+        const toastId = toast.loading("Analizando canción...");
 
         const res = await fetch("/api/agregar-cancion", {
             method: "POST",
@@ -155,10 +146,11 @@ export default function VistaMesa() {
 
         const data = await res.json();
 
+        // 3. Actualizamos la notificación flotante según el resultado
         if (res.ok) {
-            setMensaje(`✅ Agregada como ${data.genero}`);
+            toast.success(`Agregada como ${data.genero}`, { id: toastId });
         } else {
-            setMensaje(`⚠️ ${data.error}`);
+            toast.error(data.error, { id: toastId, duration: 5000 }); // Dejamos el error 5 segundos para que puedan leerlo
         }
 
         setAgregandoId(null);
@@ -170,7 +162,30 @@ export default function VistaMesa() {
         return `${min}:${seg.toString().padStart(2, "0")}`;
     }
 
-    if (cargando) return <p style={{ padding: 20 }}>Cargando...</p>;
+    if (cargando) {
+        return (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", fontFamily: "sans-serif" }}>
+                {/* Un spinner sencillo hecho con CSS */}
+                <div style={{
+                    border: "4px solid rgba(0, 0, 0, 0.1)",
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "50%",
+                    borderLeftColor: "#000",
+                    animation: "spin 1s linear infinite",
+                    marginBottom: "15px"
+                }} />
+                {/* Inyectamos los keyframes para la animación del spinner */}
+                <style>{`
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                `}</style>
+                <p style={{ fontSize: "18px", color: "#666" }}>Preparando tu mesa...</p>
+            </div>
+        );
+    }
 
     if (!existe) {
         return (
@@ -185,10 +200,20 @@ export default function VistaMesa() {
 
     return (
         <div style={{ padding: 20, fontFamily: "sans-serif", maxWidth: 700 }}>
-            <h1>🎵 Mesa #{mesa?.numero}</h1>
-            <p style={{ fontSize: 18 }}>
-                Créditos disponibles: <strong>{mesa?.creditosDisponibles}</strong>
-            </p>
+            {/* 4. Montamos el Toaster en la parte superior para que sea visible en celulares */}
+            <Toaster position="top-center" richColors />
+
+            <div style={{ marginBottom: 25, textAlign: "center" }}>
+                <h1 style={{ margin: "0 0 10px 0", color: "#333" }}>🎵 Mesa #{mesa?.numero}</h1>
+                <p style={{ margin: "0 0 15px 0", color: "#555", fontSize: "16px", fontStyle: "italic" }}>
+                    ¡Bienvenidos! Disfruten de su música preferida aquí en <strong>La Oficina</strong>.
+                </p>
+                <div style={{ display: "inline-block", backgroundColor: "#f0f0f0", padding: "8px 16px", borderRadius: "20px" }}>
+                    <span style={{ fontSize: "15px" }}>
+                        Créditos disponibles: <strong style={{ color: mesa?.creditosDisponibles === 0 ? "#ff4d4f" : "#389e0d", fontSize: "18px" }}>{mesa?.creditosDisponibles}</strong>
+                    </span>
+                </div>
+            </div>
 
             {sinCreditos ? (
                 <div
@@ -224,21 +249,24 @@ export default function VistaMesa() {
                         </button>
                     </div>
 
-                    {buscando && <p>Buscando...</p>}
-                    {mensaje && <p style={{ marginTop: 10, fontWeight: "bold" }}>{mensaje}</p>}
+                    {buscando && <p style={{ marginTop: 10, color: "#666" }}>Buscando en YouTube...</p>}
 
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 20 }}>
                         {resultados.map((video) => (
                             <div key={video.id} style={{ width: 200 }}>
-                                <img src={video.miniatura} alt={video.titulo} width="100%" />
-                                <p style={{ fontSize: 14, fontWeight: "bold" }}>{video.titulo}</p>
-                                <p style={{ fontSize: 12, color: "#666" }}>{video.canal}</p>
+                                <img src={video.miniatura} alt={video.titulo} width="100%" style={{ borderRadius: 8 }} />
+                                <p style={{ fontSize: 14, fontWeight: "bold", margin: "8px 0 4px" }}>{video.titulo}</p>
+                                <p style={{ fontSize: 12, color: "#666", margin: "0 0 8px" }}>{video.canal}</p>
                                 <button
                                     onClick={() => agregarCancion(video)}
                                     disabled={agregandoId === video.id}
-                                    style={{ padding: "6px 12px", width: "100%" }}
+                                    style={{ 
+                                        padding: "6px 12px", 
+                                        width: "100%", 
+                                        cursor: agregandoId === video.id ? "not-allowed" : "pointer" 
+                                    }}
                                 >
-                                    {agregandoId === video.id ? "Agregando..." : "+ Agregar a la cola"}
+                                    {agregandoId === video.id ? "Analizando..." : "+ Agregar a la cola"}
                                 </button>
                             </div>
                         ))}
@@ -246,14 +274,12 @@ export default function VistaMesa() {
                 </>
             )}
 
-            {/* NUEVA SECCIÓN: Cola de reproducción */}
             <div style={{ marginTop: 40, borderTop: "1px solid #eee", paddingTop: 20 }}>
                 <h2>🎶 Próximas en sonar</h2>
                 {cola.length === 0 ? (
                     <p style={{ color: "#666" }}>No hay canciones en la cola. ¡Sé el primero en pedir una!</p>
                 ) : (
                     <ol style={{ paddingLeft: 20, margin: 0 }}>
-                        {/* Mostramos solo las siguientes 10 para no hacer scroll infinito */}
                         {cola.slice(0, 10).map((c) => (
                             <li key={c.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #f5f5f5" }}>
                                 <strong>{c.titulo}</strong>
