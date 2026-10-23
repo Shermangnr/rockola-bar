@@ -118,41 +118,33 @@ export default function VistaMesa() {
         if (res.ok) {
             setResultados(data.videos);
             if (data.videos.length === 0) {
-                toast.info("No encontramos canciones con ese nombre."); // Aviso sutil si no hay resultados
+                toast.info("No encontramos canciones con ese nombre.");
             }
         } else {
-            toast.error(data.error || "Error al buscar"); // Error rojo
+            toast.error(data.error || "Error al buscar");
         }
-
         setBuscando(false);
     }
 
     async function agregarCancion(video: VideoYoutube) {
         setAgregandoId(video.id);
-        
-        // 2. Mostramos un mensaje de carga flotante mientras Gemini procesa
         const toastId = toast.loading("Analizando canción...");
 
         const res = await fetch("/api/agregar-cancion", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                numeroMesa,
-                videoId: video.id,
-                titulo: video.titulo,
-                canal: video.canal,
-            }),
+            body: JSON.stringify({ numeroMesa, videoId: video.id, titulo: video.titulo, canal: video.canal }),
         });
 
         const data = await res.json();
 
-        // 3. Actualizamos la notificación flotante según el resultado
         if (res.ok) {
             toast.success(`Agregada como ${data.genero}`, { id: toastId });
+            setBusqueda(""); 
+            setResultados([]);
         } else {
-            toast.error(data.error, { id: toastId, duration: 5000 }); // Dejamos el error 5 segundos para que puedan leerlo
+            toast.error(data.error, { id: toastId, duration: 5000 });
         }
-
         setAgregandoId(null);
     }
 
@@ -164,34 +156,18 @@ export default function VistaMesa() {
 
     if (cargando) {
         return (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", fontFamily: "sans-serif" }}>
-                {/* Un spinner sencillo hecho con CSS */}
-                <div style={{
-                    border: "4px solid rgba(0, 0, 0, 0.1)",
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "50%",
-                    borderLeftColor: "#000",
-                    animation: "spin 1s linear infinite",
-                    marginBottom: "15px"
-                }} />
-                {/* Inyectamos los keyframes para la animación del spinner */}
-                <style>{`
-                    @keyframes spin {
-                        0% { transform: rotate(0deg); }
-                        100% { transform: rotate(360deg); }
-                    }
-                `}</style>
-                <p style={{ fontSize: "18px", color: "#666" }}>Preparando tu mesa...</p>
+            <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f0f11] font-sans">
+                <div className="w-10 h-10 border-4 border-neutral-800 border-l-yellow-500 rounded-full animate-spin mb-4" />
+                <p className="text-neutral-400 text-lg">Preparando tu mesa...</p>
             </div>
         );
     }
 
     if (!existe) {
         return (
-            <div style={{ padding: 20 }}>
-                <h1>⚠️ Mesa no encontrada</h1>
-                <p>La mesa #{numeroMesa} no existe. Verifica el código QR.</p>
+            <div className="min-h-screen bg-[#0f0f11] text-white p-6 text-center flex flex-col justify-center">
+                <h1 className="text-2xl font-bold mb-2">⚠️ Mesa no encontrada</h1>
+                <p className="text-neutral-400">La mesa #{numeroMesa} no existe. Verifica el código QR.</p>
             </div>
         );
     }
@@ -199,97 +175,166 @@ export default function VistaMesa() {
     const sinCreditos = mesa !== null && mesa.creditosDisponibles <= 0;
 
     return (
-        <div style={{ padding: 20, fontFamily: "sans-serif", maxWidth: 700 }}>
-            {/* 4. Montamos el Toaster en la parte superior para que sea visible en celulares */}
-            <Toaster position="top-center" richColors />
+        <div className="min-h-screen bg-[#0f0f11] text-white font-sans max-w-md mx-auto relative pb-24">
+            <Toaster position="top-center" richColors theme="dark" />
 
-            <div style={{ marginBottom: 25, textAlign: "center" }}>
-                <h1 style={{ margin: "0 0 10px 0", color: "#333" }}>🎵 Mesa #{mesa?.numero}</h1>
-                <p style={{ margin: "0 0 15px 0", color: "#555", fontSize: "16px", fontStyle: "italic" }}>
-                    ¡Bienvenidos! Disfruten de su música preferida aquí en <strong>La Oficina</strong>.
-                </p>
-                <div style={{ display: "inline-block", backgroundColor: "#f0f0f0", padding: "8px 16px", borderRadius: "20px" }}>
-                    <span style={{ fontSize: "15px" }}>
-                        Créditos disponibles: <strong style={{ color: mesa?.creditosDisponibles === 0 ? "#ff4d4f" : "#389e0d", fontSize: "18px" }}>{mesa?.creditosDisponibles}</strong>
-                    </span>
-                </div>
+            {/* HEADER FIJO (STICKY) CON EFECTO VIDRIO */}
+            <div className="sticky top-0 z-50 bg-[#0f0f11]/60 backdrop-blur-xl px-4 pt-4 pb-3 border-b border-white/5 shadow-md">
+                <header className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        {/* LOGO CENTRADO Y AJUSTADO */}
+                        <div className="w-12 h-12 rounded-full border border-yellow-500/50 overflow-hidden shrink-0 flex items-center justify-center bg-[#0f0f11]">
+                            <img 
+                                src="/logo-la-oficina.jpg" 
+                                alt="Logo La Oficina" 
+                                className="w-full h-full object-contain object-center scale-110"
+                            />
+                        </div>
+                        <div>
+                            <p className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest leading-none mb-1">Rockola Exclusiva</p>
+                            <p className="text-sm font-semibold flex items-center gap-2 leading-none">
+                                La Oficina <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            </p>
+                        </div>
+                    </div>
+                    <div className="bg-[#1a1a1c]/80 backdrop-blur-md border border-neutral-800 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shrink-0">
+                        🎵 MESA #{mesa?.numero}
+                    </div>
+                </header>
             </div>
 
-            {sinCreditos ? (
-                <div
-                    style={{
-                        marginTop: 20,
-                        padding: 16,
-                        background: "#fff3cd",
-                        border: "1px solid #ffecb5",
-                        borderRadius: 8,
-                    }}
-                >
-                    <p style={{ fontWeight: "bold", margin: 0 }}>
-                        😕 Ups, se te acabaron los créditos.
+            {/* CONTENEDOR PRINCIPAL CON PADDING */}
+            <div className="p-4 pt-6">
+                {/* BIENVENIDA Y CRÉDITOS */}
+                <div className="text-center mb-8">
+                    <p className="text-yellow-500 text-sm italic font-medium mb-1 px-4">
+                        ¡Bienvenidos! Disfruten de su música preferida aquí en <strong className="text-white">La Oficina</strong>.
                     </p>
-                    <p style={{ margin: "8px 0 0" }}>
-                        Debes esperar <strong>{formatearTiempo(segundosRestantes)}</strong> para poder
-                        pedir más música.
-                    </p>
+                    <p className="text-[10px] text-neutral-500 mb-5 tracking-widest uppercase">Horas extras aseguradas</p>
+                    
+                    <div className="inline-flex items-center gap-3 bg-[#1a1a1c] border border-yellow-500/30 rounded-full px-5 py-2">
+                        <span className="text-yellow-500 text-sm">ℹ️</span>
+                        <span className="text-sm text-neutral-300">Créditos disponibles:</span>
+                        <span className={`w-6 h-6 flex items-center justify-center rounded text-sm font-bold ${sinCreditos ? 'bg-red-500' : 'bg-emerald-600'}`}>
+                            {mesa?.creditosDisponibles}
+                        </span>
+                    </div>
                 </div>
-            ) : (
-                <>
-                    <div style={{ marginTop: 20 }}>
-                        <input
-                            type="text"
-                            value={busqueda}
-                            onChange={(e) => setBusqueda(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && buscarVideos()}
-                            placeholder="Busca tu canción..."
-                            style={{ padding: 8, width: "70%", marginRight: 10 }}
-                        />
-                        <button onClick={buscarVideos} style={{ padding: "8px 16px" }}>
-                            Buscar
-                        </button>
+
+                {/* BUSCADOR O ESTADO DE SIN CRÉDITOS */}
+                {sinCreditos ? (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 text-center mb-8">
+                        <p className="text-red-400 font-bold mb-2">😕 Ups, se te acabaron los créditos.</p>
+                        <p className="text-sm text-red-200/70">
+                            Debes esperar <strong className="text-red-400">{formatearTiempo(segundosRestantes)}</strong> para pedir más.
+                        </p>
                     </div>
-
-                    {buscando && <p style={{ marginTop: 10, color: "#666" }}>Buscando en YouTube...</p>}
-
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 20 }}>
-                        {resultados.map((video) => (
-                            <div key={video.id} style={{ width: 200 }}>
-                                <img src={video.miniatura} alt={video.titulo} width="100%" style={{ borderRadius: 8 }} />
-                                <p style={{ fontSize: 14, fontWeight: "bold", margin: "8px 0 4px" }}>{video.titulo}</p>
-                                <p style={{ fontSize: 12, color: "#666", margin: "0 0 8px" }}>{video.canal}</p>
-                                <button
-                                    onClick={() => agregarCancion(video)}
-                                    disabled={agregandoId === video.id}
-                                    style={{ 
-                                        padding: "6px 12px", 
-                                        width: "100%", 
-                                        cursor: agregandoId === video.id ? "not-allowed" : "pointer" 
-                                    }}
-                                >
-                                    {agregandoId === video.id ? "Analizando..." : "+ Agregar a la cola"}
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </>
-            )}
-
-            <div style={{ marginTop: 40, borderTop: "1px solid #eee", paddingTop: 20 }}>
-                <h2>🎶 Próximas en sonar</h2>
-                {cola.length === 0 ? (
-                    <p style={{ color: "#666" }}>No hay canciones en la cola. ¡Sé el primero en pedir una!</p>
                 ) : (
-                    <ol style={{ paddingLeft: 20, margin: 0 }}>
-                        {cola.slice(0, 10).map((c) => (
-                            <li key={c.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #f5f5f5" }}>
-                                <strong>{c.titulo}</strong>
-                                <div style={{ fontSize: "0.85em", color: "#666", marginTop: 4 }}>
-                                    {c.genero} • Pedida por Mesa {c.mesaId}
+                    <div className="mb-8">
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <input
+                                    type="text"
+                                    value={busqueda}
+                                    onChange={(e) => setBusqueda(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && buscarVideos()}
+                                    placeholder="Busca tu canción..."
+                                    className="w-full bg-[#1a1a1c] border border-neutral-800 text-white rounded-xl pl-4 pr-4 py-3.5 text-sm focus:outline-none focus:border-yellow-500/50 transition-colors"
+                                />
+                            </div>
+                            <button 
+                                onClick={buscarVideos} 
+                                disabled={buscando}
+                                className="bg-yellow-500 text-black font-bold px-6 py-3.5 rounded-xl text-sm hover:bg-yellow-400 transition-colors"
+                            >
+                                {buscando ? "..." : "BUSCAR"}
+                            </button>
+                        </div>
+
+                        {/* RESULTADOS DE BÚSQUEDA */}
+                        {resultados.length > 0 && (
+                            <div className="mt-6">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h2 className="text-xs font-bold tracking-widest text-neutral-400 uppercase">Resultados</h2>
+                                    <button onClick={() => setResultados([])} className="text-xs text-yellow-500">Cerrar</button>
                                 </div>
-                            </li>
-                        ))}
-                    </ol>
+                                <div className="flex flex-col gap-3">
+                                    {resultados.map((video) => (
+                                        <div key={video.id} className="flex gap-3 bg-[#1a1a1c] border border-neutral-800 p-2 rounded-xl items-center">
+                                            <img src={video.miniatura} alt={video.titulo} className="w-20 h-14 object-cover rounded-lg" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-bold text-white truncate">{video.titulo}</p>
+                                                <p className="text-xs text-neutral-400 truncate">{video.canal}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => agregarCancion(video)}
+                                                disabled={agregandoId === video.id}
+                                                className="bg-neutral-800 text-yellow-500 border border-neutral-700 text-xs font-bold px-3 py-2 rounded-lg shrink-0 hover:bg-neutral-700"
+                                            >
+                                                {agregandoId === video.id ? '⏳' : 'Agregar'}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 )}
+
+                {/* COLA DE REPRODUCCIÓN */}
+                <div>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="font-bold text-sm tracking-widest flex items-center gap-2">
+                            🎵 PRÓXIMAS EN SONAR
+                        </h2>
+                        {cola.length > 0 && (
+                            <span className="text-xs text-yellow-500 border border-yellow-500/30 rounded-full px-2 py-0.5">
+                                {cola.length} en fila
+                            </span>
+                        )}
+                    </div>
+
+                    {cola.length === 0 ? (
+                        <div className="text-center py-10 bg-[#1a1a1c] rounded-2xl border border-neutral-800">
+                            <p className="text-neutral-500 text-sm">No hay canciones en la cola.<br/>¡Sé el primero en pedir una!</p>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-3">
+                            {cola.slice(0, 10).map((c, index) => {
+                                const isFirst = index === 0;
+                                return (
+                                    <div 
+                                        key={c.id} 
+                                        className={`p-4 rounded-2xl flex items-center gap-4 transition-all ${
+                                            isFirst 
+                                                ? 'border border-yellow-500/50 bg-gradient-to-r from-yellow-500/10 to-transparent' 
+                                                : 'border border-neutral-800 bg-[#1a1a1c]'
+                                        }`}
+                                    >
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-mono text-sm shrink-0 ${
+                                            isFirst ? 'bg-yellow-500/20 text-yellow-500' : 'bg-neutral-900 text-neutral-500'
+                                        }`}>
+                                            {isFirst ? '▶' : String(index + 1).padStart(2, '0')}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className={`text-sm font-bold truncate ${isFirst ? 'text-yellow-500' : 'text-neutral-200'}`}>
+                                                {c.titulo}
+                                            </h3>
+                                            <p className="text-xs text-neutral-400 truncate mt-0.5">
+                                                {c.genero} • Pedida por Mesa {c.mesaId}
+                                            </p>
+                                        </div>
+                                        {isFirst && (
+                                            <span className="text-[10px] bg-yellow-500 text-black px-2 py-1 rounded font-bold shrink-0">
+                                                #1 Siguiente
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
